@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Guide — Raspberry Pi 4 Flasher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .codeblock{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12.5px;overflow-x:auto;margin:10px 0 18px;white-space:pre;}
+  .codeblock, .codeblock *{font-family:"JetBrains Mono", ui-monospace, monospace;color:var(--text);}
+  h2{font-size:16px;margin:0 0 4px;font-weight:700;}
+  .step-num-inline{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--border-lit);font-size:11px;color:var(--muted);font-weight:600;margin-right:8px;}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="brand"><span class="chip"></span>RPi4 Flasher</div>
+  <div class="links">
+    <a href="index.html">Flasher Tool</a>
+    <a href="https://github.com/raspberrypi/firmware" target="_blank" rel="noopener">Firmware Source</a>
+  </div>
+  <div class="theme-toggle">
+    <button id="btnDark">Dark</button>
+    <button id="btnLight">Light</button>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="banner"><span class="dot"></span>Build guide</div>
+  <h1>Compiling for bare-metal RPi4</h1>
+  <div class="sub">Install the toolchain, produce a bootable kernel8.img, then flash it with the tool.</div>
+</div>
+
+<div class="wrap">
+
+  <div class="step">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div class="step-title">Install the compiler</div>
+    </div>
+    <div class="step-body">
+      <p class="help">The ARM bare-metal toolchain — targets AArch64 with no OS/libc assumptions. Use this, not <code>aarch64-linux-gnu-gcc</code>, which assumes a Linux target.</p>
+      <div class="codeblock">sudo apt update
+sudo apt install gcc-aarch64-none-elf</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div class="step-title">Entry point — start.S</div>
+    </div>
+    <div class="step-body">
+      <p class="help">Sets up the stack and jumps into your C code.</p>
+      <div class="codeblock">.section ".text.boot"
+.global _start
+_start:
+    ldr x0, =0x80000
+    mov sp, x0
+    bl main
+hang: b hang</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <div class="step-num">3</div>
+      <div class="step-title">Linker script — linker.ld</div>
+    </div>
+    <div class="step-body">
+      <p class="help">Places your code at <code>0x80000</code> — the RPi4 default load address.</p>
+      <div class="codeblock">ENTRY(_start)
+SECTIONS
+{
+    . = 0x80000;
+    .text : { *(.text.boot) *(.text*) }
+    .rodata : { *(.rodata*) }
+    .data : { *(.data*) }
+    .bss : { *(.bss*) }
+}</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <div class="step-num">4</div>
+      <div class="step-title">Your code — main.c</div>
+    </div>
+    <div class="step-body">
+      <p class="help">Replace the body with your actual driver/application code.</p>
+      <div class="codeblock">void main(void) {
+    while (1) { }
+}</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <div class="step-num">5</div>
+      <div class="step-title">Compile, link, convert</div>
+    </div>
+    <div class="step-body">
+      <p class="help"><code>-mgeneral-regs-only</code> matters — without it GCC may emit NEON/FP instructions, and those registers aren't safe to use until you've explicitly enabled and saved FP/SIMD state in bare-metal code.</p>
+      <div class="codeblock">aarch64-none-elf-gcc -ffreestanding -mgeneral-regs-only -c start.S -o start.o
+aarch64-none-elf-gcc -ffreestanding -mgeneral-regs-only -O2 -c main.c -o main.o
+aarch64-none-elf-ld -T linker.ld -o kernel8.elf start.o main.o
+aarch64-none-elf-objcopy -O binary kernel8.elf kernel8.img</div>
+      <p class="help" style="margin-bottom:0;"><code>kernel8.img</code> is the raw binary the flasher tool needs — not the <code>.elf</code>. Take it straight to <a href="index.html">the flasher</a>.</p>
+    </div>
+  </div>
+
+  <footer>
+    Questions about a specific build error aren't covered here — this is just the install + minimal skeleton to get a bootable image out the door.
+  </footer>
+
+</div>
+
+<script>
+const html = document.documentElement;
+function setTheme(t){
+  html.setAttribute('data-theme', t);
+  document.getElementById('btnDark').classList.toggle('active', t==='dark');
+  document.getElementById('btnLight').classList.toggle('active', t==='light');
+}
+const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+setTheme(prefersDark ? 'dark' : 'light');
+document.getElementById('btnDark').addEventListener('click', () => setTheme('dark'));
+document.getElementById('btnLight').addEventListener('click', () => setTheme('light'));
+</script>
+</body>
+</html>
